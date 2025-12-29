@@ -24,7 +24,7 @@
         #page-loader {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: rgba(5, 5, 5, 0.98); backdrop-filter: blur(20px);
-            display: none; justify-content: center; align-items: center; z-index: 10000;
+            display: flex; justify-content: center; align-items: center; z-index: 10000;
         }
         .spinner { width: 60px; height: 60px; border: 5px solid var(--primary); border-top: 5px solid var(--gold); border-radius: 50%; animation: spin 1s linear infinite; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
@@ -65,7 +65,6 @@
         
         .card { background: var(--glass); padding: 30px; border-radius: 25px; border: 1px solid rgba(255,255,255,0.1); margin-top: 20px; }
         
-        /* Admin Grid & Tables */
         .admin-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 30px; }
         .stat-card { background: var(--primary); padding: 25px; border-radius: 20px; border-bottom: 4px solid var(--gold); text-align: center; }
         .stat-card h4 { font-size: 0.9rem; opacity: 0.8; }
@@ -131,7 +130,7 @@
 
     <div id="app-wrapper" style="flex: 1; display: flex; flex-direction: column;">
         
-        <section id="auth-page" class="page-section active hero-section">
+        <section id="auth-page" class="page-section hero-section">
             <div class="main-card">
                 <div class="master-side">
                     <div class="wave-bg"></div>
@@ -380,6 +379,17 @@
         </div>
     </div>
 
+    <div id="logoutModal" class="modal" onclick="closeLogoutModal()">
+        <div class="modal-content" onclick="event.stopPropagation()">
+            <h2 style="color:var(--gold); margin-bottom:15px;"><i class="fas fa-sign-out-alt"></i> تأكيد تسجيل الخروج</h2>
+            <p style="opacity:0.8; line-height:1.7;">هل أنت متأكد إنك عايز تسجيل الخروج من المنصة؟</p>
+            <div style="display:flex; gap:15px; margin-top:25px;">
+                <button class="btn-action" style="background:var(--error);" onclick="confirmLogout()">نعم، خروج</button>
+                <button class="btn-action" style="background:#444;" onclick="closeLogoutModal()">إلغاء</button>
+            </div>
+        </div>
+    </div>
+
     <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-database-compat.js"></script>
@@ -396,15 +406,9 @@
         };
         firebase.initializeApp(firebaseConfig);
 
-        firebase.auth().setPersistence(firebase.auth.Auth.Persistence.LOCAL)
-  .then(() => {
-    console.log("Auth persistence enabled");
-  })
-  .catch((error) => {
-    console.error(error);
-  });
         const auth = firebase.auth();
         const db = firebase.database();
+        auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
 
         let currentUser = null;
         let currentUserUID = null;
@@ -418,10 +422,12 @@
             setTimeout(() => toast.remove(), 4000);
         }
 
+        // Auth Logic & Persistence Update
         auth.onAuthStateChanged((user) => {
+            const loader = document.getElementById('page-loader');
             if (user) {
                 currentUserUID = user.uid;
-                db.ref('users/' + user.uid).on('value', (snap) => {
+                db.ref('users/' + user.uid).once('value').then((snap) => {
                     currentUser = snap.val();
                     if(!currentUser) return;
                     
@@ -433,10 +439,17 @@
                         showToast('تم حظر حسابك!');
                         logout();
                     } else if(currentUser.status === 'accepted') {
-                        document.getElementById('stat-pending').classList.add('hidden');
-                        document.getElementById('stat-rejected').classList.add('hidden');
-                        document.getElementById('stat-accepted').classList.remove('hidden');
-                        if(document.getElementById('auth-page').classList.contains('active')) navigate('status-page');
+                        // Check if welcome was already seen
+                        const welcomeSeen = localStorage.getItem('welcome_seen_' + user.uid);
+                        if (welcomeSeen) {
+                            enterPlatform(); // Go directly to dashboard
+                        } else {
+                            // Show "Accepted" page for the first time
+                            document.getElementById('stat-pending').classList.add('hidden');
+                            document.getElementById('stat-rejected').classList.add('hidden');
+                            document.getElementById('stat-accepted').classList.remove('hidden');
+                            navigate('status-page');
+                        }
                     } else if(currentUser.status === 'rejected') {
                         document.getElementById('stat-pending').classList.add('hidden');
                         document.getElementById('stat-accepted').classList.add('hidden');
@@ -448,20 +461,21 @@
                 });
             } else {
                 navigate('auth-page');
+                loader.style.display = 'none';
             }
         });
 
         function navigate(pageId) {
             const loader = document.getElementById('page-loader');
             loader.style.display = 'flex';
+            
+            document.querySelectorAll('.page-section').forEach(p => p.classList.remove('active'));
+            const next = document.getElementById(pageId);
+            
             setTimeout(() => {
-                document.querySelectorAll('.page-section').forEach(p => {
-                    p.classList.remove('active');
-                });
-                const next = document.getElementById(pageId);
                 next.classList.add('active');
                 loader.style.display = 'none';
-            }, 600);
+            }, 500);
         }
 
         function switchAuth(type) {
@@ -512,6 +526,9 @@
         };
 
         function enterPlatform() {
+            // Mark welcome as seen
+            if (currentUserUID) localStorage.setItem('welcome_seen_' + currentUserUID, 'true');
+            
             document.getElementById('p-name-head').innerText = currentUser.name;
             document.getElementById('profile-data').innerHTML = `
                 <div class="info-item"><label><i class="fas fa-graduation-cap"></i> الصف الدراسي</label><strong>${currentUser.grade} ثانوي</strong></div>
@@ -524,6 +541,14 @@
             navigate('dash-page');
             updateBattery();
         }
+
+       function logout() {
+    db.ref().off();
+    auth.signOut().then(() => {
+        localStorage.clear();
+        location.reload();
+    });
+}
 
         function updateBattery() {
             db.ref('lectures').once('value', snap => {
@@ -617,19 +642,9 @@
             document.getElementById('nav-'+tab).classList.add('active-tab');
         }
 
-      function openLogoutModal() {
-    document.getElementById('logoutModal').style.display = 'flex';
-}
-
-function closeLogoutModal() {
-    document.getElementById('logoutModal').style.display = 'none';
-}
-
-function confirmLogout() {
-    auth.signOut().then(() => {
-        location.reload();
-    });
-}
+        function openLogoutModal() { document.getElementById('logoutModal').style.display = 'flex'; }
+        function closeLogoutModal() { document.getElementById('logoutModal').style.display = 'none'; }
+        function confirmLogout() { logout(); }
 
         function showLegal(type) {
             const modal = document.getElementById('legalModal');
@@ -796,28 +811,5 @@ function confirmLogout() {
                 .then(() => showToast('تم الرد على الطالب'));
         }
     </script>
-    <!-- Logout Modal -->
-<div id="logoutModal" class="modal" onclick="closeLogoutModal()">
-    <div class="modal-content" onclick="event.stopPropagation()">
-
-        <h2 style="color:var(--gold); margin-bottom:15px;">
-            <i class="fas fa-sign-out-alt"></i> تأكيد تسجيل الخروج
-        </h2>
-
-        <p style="opacity:0.8; line-height:1.7;">
-            هل أنت متأكد إنك عايز تسجيل الخروج من المنصة؟
-        </p>
-
-        <div style="display:flex; gap:15px; margin-top:25px;">
-            <button class="btn-action" style="background:var(--error);" onclick="confirmLogout()">
-                نعم، خروج
-            </button>
-            <button class="btn-action" style="background:#444;" onclick="closeLogoutModal()">
-                إلغاء
-            </button>
-        </div>
-
-    </div>
-</div>
 </body>
 </html>
