@@ -217,7 +217,7 @@
                     <a onclick="showTab('profile')" id="nav-profile">ملفي</a>
                     <a onclick="showTab('support')" id="nav-support">الدعم</a>
                     <a id="admin-btn" onclick="openAdmin()" class="hidden" style="color:var(--success); border:1px solid var(--success); padding:5px 10px; border-radius:8px;"><i class="fas fa-user-shield"></i> لوحة الإدارة</a>
-                    <a onclick="logout()" style="color:var(--gold); border:1px solid var(--gold); padding:5px 15px; border-radius:10px;">خروج</a>
+                    <a onclick="openLogoutModal()" style="color:var(--gold); border:1px solid var(--gold); padding:5px 15px; border-radius:10px;">خروج</a>
                 </nav>
             </header>
 
@@ -395,6 +395,14 @@
             appId: "1:677642381642:web:0c58e7b3f86a6d81c4f9b3"
         };
         firebase.initializeApp(firebaseConfig);
+
+        firebase.auth().setPersistence(firebase.auth.Auth.Persistence.LOCAL)
+  .then(() => {
+    console.log("Auth persistence enabled");
+  })
+  .catch((error) => {
+    console.error(error);
+  });
         const auth = firebase.auth();
         const db = firebase.database();
 
@@ -609,9 +617,19 @@
             document.getElementById('nav-'+tab).classList.add('active-tab');
         }
 
-        function logout() {
-            auth.signOut().then(() => location.reload());
-        }
+      function openLogoutModal() {
+    document.getElementById('logoutModal').style.display = 'flex';
+}
+
+function closeLogoutModal() {
+    document.getElementById('logoutModal').style.display = 'none';
+}
+
+function confirmLogout() {
+    auth.signOut().then(() => {
+        location.reload();
+    });
+}
 
         function showLegal(type) {
             const modal = document.getElementById('legalModal');
@@ -778,5 +796,28 @@
                 .then(() => showToast('تم الرد على الطالب'));
         }
     </script>
+    <!-- Logout Modal -->
+<div id="logoutModal" class="modal" onclick="closeLogoutModal()">
+    <div class="modal-content" onclick="event.stopPropagation()">
+
+        <h2 style="color:var(--gold); margin-bottom:15px;">
+            <i class="fas fa-sign-out-alt"></i> تأكيد تسجيل الخروج
+        </h2>
+
+        <p style="opacity:0.8; line-height:1.7;">
+            هل أنت متأكد إنك عايز تسجيل الخروج من المنصة؟
+        </p>
+
+        <div style="display:flex; gap:15px; margin-top:25px;">
+            <button class="btn-action" style="background:var(--error);" onclick="confirmLogout()">
+                نعم، خروج
+            </button>
+            <button class="btn-action" style="background:#444;" onclick="closeLogoutModal()">
+                إلغاء
+            </button>
+        </div>
+
+    </div>
+</div>
 </body>
 </html>
